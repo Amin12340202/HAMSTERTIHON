@@ -1,295 +1,77 @@
-(() => {
-  'use strict';
-
-  const SAVE_KEY = 'tihon-kombat-save-v1';
-  const DAY_KEY = () => new Date().toLocaleDateString('en-CA');
-  const STAGES = [
-    { level: 1, name: 'НОВИЧОК', label: 'ROOKIE MODE', color: '#c6f467', short: 'Новичок', icon: '✦' },
-    { level: 26, name: 'EASY DEMON', label: 'EASY DEMON MODE', color: '#79e6ff', short: 'Easy Demon', icon: '♢' },
-    { level: 51, name: 'MEDIUM DEMON', label: 'MEDIUM DEMON MODE', color: '#ff71d7', short: 'Medium Demon', icon: '✹' },
-    { level: 76, name: 'HARD DEMON', label: 'HARD DEMON MODE', color: '#ff765b', short: 'Hard Demon', icon: '♜' },
-    { level: 100, name: 'ULTRA FUNK DEMON', label: 'ULTRA FUNK DEMON LEVEL', color: '#e9c5ff', short: 'Ultra Funk Demon', icon: '✺' },
-  ];
-  const UPGRADES = [
-    { id: 'tap', name: 'Сильный палец', description: '+1 монета за каждый тап.', icon: '👆', color: '#c6f467', category: 'tap', base: 35, growth: 1.36, effect: '+1 к силе тапа' },
-    { id: 'autoclick', name: 'Авто-тренер', description: 'Тихон тренируется и фармит сам.', icon: '⚙', color: '#6ad9e6', category: 'idle', base: 120, growth: 1.42, effect: '+2 монеты/сек' },
-    { id: 'critical', name: 'Критический тап', description: 'Шанс выбить в 5 раз больше монет.', icon: '⚡', color: '#ffcf70', category: 'tap', base: 220, growth: 1.48, effect: '+4% шанс крита', max: 20 },
-    { id: 'combo', name: 'Комбо-двигатель', description: 'Каждый апгрейд разгоняет комбо.', icon: '⛓', color: '#ae91ff', category: 'boost', base: 380, growth: 1.5, effect: '+8% ко всем монетам' },
-    { id: 'vip', name: 'Фанк-браслет', description: 'Стильный буст к каждому заработку.', icon: '✧', color: '#ff91d1', category: 'boost', base: 800, growth: 1.54, effect: '+15% ко всем монетам' },
-    { id: 'drone', name: 'Фанк-дрон', description: 'Маленький помощник с большим профитом.', icon: '◈', color: '#81a9ff', category: 'idle', base: 1550, growth: 1.58, effect: '+12 монет/сек' },
-    { id: 'rhythm', name: 'Чувство ритма', description: 'Прокачанный ритм приносит больше опыта.', icon: '♫', color: '#ff78b3', category: 'tap', base: 2800, growth: 1.6, effect: '+25% опыта за тап' },
-    { id: 'disco', name: 'Диско-реактор', description: 'Включи режим легендарного заработка.', icon: '✺', color: '#ffa266', category: 'boost', base: 6200, growth: 1.62, effect: '+50% ко всем монетам' },
-  ];
-  const QUESTS = [
-    { id: 'taps', name: 'Марафон тапов', description: 'Тапни по Тихону 50 раз.', reward: 250, target: 50, kind: 'taps', icon: '👆', color: '#c6f467' },
-    { id: 'upgrade', name: 'Собери арсенал', description: 'Купи 3 улучшения за сегодня.', reward: 400, target: 3, kind: 'upgrades', icon: '⚙', color: '#6ad9e6' },
-    { id: 'earn', name: 'Монетный дождь', description: 'Заработай 1 000 монет тапами.', reward: 500, target: 1000, kind: 'earned', icon: '✦', color: '#ffcf70' },
-  ];
-
-  const freshState = () => ({ coins: 0, level: 1, xp: 0, taps: 0, tapsToday: 0, earnedToday: 0, upgradesToday: 0, upgrades: {}, claimed: [], streak: 1, lastDay: DAY_KEY(), lastSeen: Date.now() });
-  let state = loadState();
-  let activeFilter = 'all';
-
-  function loadState() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-      if (!saved || typeof saved !== 'object') return freshState();
-      const defaults = freshState();
-      return { ...defaults, ...saved, upgrades: saved.upgrades && typeof saved.upgrades === 'object' ? saved.upgrades : {}, claimed: Array.isArray(saved.claimed) ? saved.claimed : [] };
-    } catch { return freshState(); }
-  }
-
-  function saveState() {
-    state.lastSeen = Date.now();
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Storage can be disabled in private browsing. */ }
-  }
-
-  function resetDailyIfNeeded() {
-    const today = DAY_KEY();
-    if (state.lastDay === today) return;
-    const previous = new Date(); previous.setDate(previous.getDate() - 1);
-    const yesterday = previous.toLocaleDateString('en-CA');
-    state.streak = state.lastDay === yesterday ? (state.streak || 0) + 1 : 1;
-    state.lastDay = today;
-    state.earnedToday = 0;
-    state.tapsToday = 0;
-    state.upgradesToday = 0;
-    state.claimed = [];
-  }
-
-  function offlineProgress() {
-    const elapsed = Math.max(0, Math.min(8 * 60 * 60, (Date.now() - (state.lastSeen || Date.now())) / 1000));
-    const reward = Math.floor(elapsed * passiveRate());
-    if (reward > 0) { state.coins += reward; showToast(`Пока тебя не было: +${formatNumber(reward)} ✦`); }
-  }
-
-  function stageIndex() {
-    let current = 0;
-    STAGES.forEach((stage, index) => { if (state.level >= stage.level) current = index; });
-    return current;
-  }
-
-  function levelRequirement(level = state.level) { return Math.round(18 + level * 4); }
-  function upgradeLevel(id) { return Math.max(0, Number(state.upgrades[id]) || 0); }
-  function costFor(item) { return Math.ceil(item.base * Math.pow(item.growth, upgradeLevel(item.id))); }
-  function totalUpgradeLevels() { return Object.values(state.upgrades).reduce((sum, count) => sum + (Number(count) || 0), 0); }
-  function multiplier() { return 1 + upgradeLevel('combo') * .08 + upgradeLevel('vip') * .15 + upgradeLevel('disco') * .5; }
-  function tapPower() { return 1 + upgradeLevel('tap'); }
-  function passiveRate() { return upgradeLevel('autoclick') * 2 + upgradeLevel('drone') * 12; }
-  function xpFactor() { return 1 + upgradeLevel('rhythm') * .25; }
-  function formatNumber(value) {
-    const safe = Math.max(0, Number(value) || 0);
-    if (safe < 10000) return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: safe < 100 ? 1 : 0 }).format(safe);
-    if (safe < 1e6) return `${(safe / 1000).toFixed(safe < 100000 ? 1 : 0).replace('.', ',')}K`;
-    return `${(safe / 1e6).toFixed(1).replace('.', ',')}M`;
-  }
-
-  function render() {
-    const idx = stageIndex();
-    const stage = STAGES[idx];
-    const requirement = state.level < 100 ? levelRequirement() : 0;
-    const percent = requirement ? Math.min(100, state.xp / requirement * 100) : 100;
-    setText('balance', formatNumber(state.coins));
-    setText('upgradeBalance', formatNumber(state.coins));
-    setText('levelNumber', String(state.level).padStart(2, '0'));
-    setText('upgradeLevel', String(state.level).padStart(2, '0'));
-    setText('sideLevel', String(state.level).padStart(2, '0'));
-    setText('sideRank', stage.short);
-    setText('rankName', stage.name);
-    setText('stageTier', stage.label);
-    setText('nextLevelLabel', String(Math.min(100, state.level + 1)).padStart(2, '0'));
-    setText('xpCurrent', formatNumber(state.xp));
-    setText('xpNeeded', requirement ? formatNumber(requirement) : 'MAX');
-    setStyle('xpFill', 'width', `${percent}%`);
-    setText('tapPower', formatNumber(tapPower()));
-    setText('passiveRate', formatNumber(passiveRate()));
-    setText('totalTaps', formatNumber(state.taps));
-    setText('upgradeCount', formatNumber(totalUpgradeLevels()));
-    setText('streak', `${state.streak || 1} ${pluralDays(state.streak || 1)}`);
-    document.getElementById('characterStage').dataset.tier = String(idx);
-    renderMilestones(idx);
-    renderDaily();
-    renderUpgrades();
-    renderQuests();
-  }
-
-  function renderMilestones(idx) {
-    const root = document.getElementById('milestoneList');
-    root.innerHTML = STAGES.slice(1).map((stage, offset) => {
-      const index = offset + 1;
-      const reached = idx >= index;
-      const active = idx === index;
-      const label = index === 4 ? 'ФИНАЛЬНЫЙ УРОВЕНЬ' : `С ${stage.level} уровня`;
-      return `<div class="milestone-row ${reached ? 'unlocked' : ''} ${active ? 'current' : ''}" style="--milestone-color:${stage.color}"><span class="milestone-badge">${reached ? stage.icon : '◇'}</span><span class="milestone-info"><b>${stage.name}</b><small>${label}</small></span><span class="milestone-status">${reached ? 'ОТКРЫТ' : `LVL ${stage.level}`}</span></div>`;
-    }).join('');
-  }
-
-  function renderDaily() {
-    const tapCount = Math.min(50, state.tapsToday || 0);
-    const claimed = state.claimed.includes('taps');
-    setText('dailyTapCount', String(tapCount));
-    setStyle('dailyProgressFill', 'width', `${tapCount / 50 * 100}%`);
-    setStyle('questDailyProgress', 'width', `${tapCount / 50 * 100}%`);
-    setText('questProgressText', `${tapCount} / 50`);
-    setText('questDate', new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date()));
-    const button = document.getElementById('claimDaily');
-    button.disabled = tapCount < 50 || claimed;
-    button.innerHTML = claimed ? 'Награда получена <span>✓</span>' : tapCount >= 50 ? 'Забрать награду <span>+250 ✦</span>' : 'Задание в процессе <span>→</span>';
-    const questButton = document.getElementById('claimQuest');
-    questButton.disabled = tapCount < 50 || claimed;
-    questButton.innerHTML = claimed ? 'Награда получена <span>✓</span>' : `Забрать награду <span>+250 ✦</span>`;
-  }
-
-  function questProgress(quest) {
-    if (quest.kind === 'taps') return Math.min(quest.target, state.tapsToday || 0);
-    if (quest.kind === 'upgrades') return Math.min(quest.target, state.upgradesToday || 0);
-    if (quest.kind === 'earned') return Math.min(quest.target, state.earnedToday || 0);
-    return 0;
-  }
-
-  function renderQuests() {
-    const root = document.getElementById('questList');
-    root.innerHTML = QUESTS.map(quest => {
-      const progress = questProgress(quest);
-      const claimed = state.claimed.includes(quest.id);
-      const done = progress >= quest.target;
-      return `<article class="quest-item" style="--quest-color:${quest.color}"><span class="quest-item-icon">${quest.icon}</span><span class="quest-item-copy"><b>${quest.name}</b><small>${quest.description}</small></span><span class="quest-item-right"><small>${formatNumber(progress)} / ${formatNumber(quest.target)} · +${quest.reward} ✦</small><button type="button" data-claim="${quest.id}" ${!done || claimed ? 'disabled' : ''}>${claimed ? 'Получено ✓' : done ? 'Забрать' : 'Выполняется'}</button></span></article>`;
-    }).join('');
-    root.querySelectorAll('[data-claim]').forEach(button => button.addEventListener('click', () => claimQuest(button.dataset.claim)));
-  }
-
-  function renderUpgrades() {
-    const root = document.getElementById('upgradeGrid');
-    const visible = UPGRADES.filter(item => activeFilter === 'all' || item.category === activeFilter);
-    root.innerHTML = visible.map(item => {
-      const level = upgradeLevel(item.id);
-      const cost = costFor(item);
-      const maxed = item.max && level >= item.max;
-      return `<article class="upgrade-card"><span class="upgrade-icon" style="--upgrade-color:${item.color}">${item.icon}</span><span class="upgrade-info"><h3>${item.name}</h3><p>${item.description}</p></span><span class="upgrade-level">LVL ${String(level).padStart(2, '0')}</span><span class="upgrade-buy"><small>${item.effect}</small><button class="buy-button" type="button" data-buy="${item.id}" ${maxed || state.coins < cost ? 'disabled' : ''}>${maxed ? 'МАКСИМУМ' : `<span>✦</span> ${formatNumber(cost)}`}</button></span></article>`;
-    }).join('');
-    root.querySelectorAll('[data-buy]').forEach(button => button.addEventListener('click', () => buyUpgrade(button.dataset.buy)));
-  }
-
-  function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
-  function setStyle(id, property, value) { const el = document.getElementById(id); if (el) el.style[property] = value; }
-  function pluralDays(number) { return number === 1 ? 'день' : number > 1 && number < 5 ? 'дня' : 'дней'; }
-
-  function awardCoins(amount) {
-    const rounded = Math.max(0, Math.floor(amount));
-    state.coins += rounded;
-    state.earnedToday = (state.earnedToday || 0) + rounded;
-    return rounded;
-  }
-
-  function addXp(amount) {
-    if (state.level >= 100) return;
-    state.xp += Math.max(1, Math.floor(amount));
-    let leveled = false;
-    while (state.level < 100 && state.xp >= levelRequirement()) {
-      state.xp -= levelRequirement();
-      state.level += 1;
-      awardCoins(state.level * 18);
-      leveled = true;
-      const milestone = STAGES.find(stage => stage.level === state.level);
-      if (milestone) showCelebration(milestone.name, state.level === 100 ? '100 УРОВЕНЬ — УЛЬТРА ФАНК!' : `УРОВЕНЬ ${state.level} — НОВЫЙ РАНГ!`);
-    }
-    if (state.level >= 100) { state.level = 100; state.xp = 0; }
-    if (leveled && !STAGES.some(stage => stage.level === state.level)) showToast(`Новый уровень: ${state.level}!`, 'reward');
-  }
-
-  function tap(event) {
-    const critChance = Math.min(.8, upgradeLevel('critical') * .04);
-    const critical = Math.random() < critChance;
-    const amount = Math.floor(tapPower() * multiplier() * (critical ? 5 : 1));
-    awardCoins(amount);
-    state.taps += 1;
-    state.tapsToday = (state.tapsToday || 0) + 1;
-    addXp(Math.max(1, Math.floor((1 + upgradeLevel('tap') * .16) * xpFactor())));
-    const target = document.getElementById('tapTarget');
-    target.classList.remove('tap-pop'); void target.offsetWidth; target.classList.add('tap-pop');
-    showFloatingGain(event, `+${formatNumber(amount)}${critical ? ' CRIT!' : ' ✦'}`);
-    render(); saveState();
-  }
-
-  function buyUpgrade(id) {
-    const item = UPGRADES.find(upgrade => upgrade.id === id);
-    if (!item) return;
-    const cost = costFor(item);
-    if (state.coins < cost || (item.max && upgradeLevel(id) >= item.max)) return;
-    state.coins -= cost;
-    state.upgrades[id] = upgradeLevel(id) + 1;
-    state.upgradesToday = (state.upgradesToday || 0) + 1;
-    showToast(`${item.name}: улучшение установлено`, 'reward');
-    render(); saveState();
-  }
-
-  function claimQuest(id) {
-    const quest = QUESTS.find(item => item.id === id);
-    if (!quest || state.claimed.includes(id) || questProgress(quest) < quest.target) return;
-    state.claimed.push(id);
-    awardCoins(quest.reward);
-    addXp(Math.round(quest.reward / 20));
-    showToast(`Задание выполнено: +${quest.reward} ✦`, 'reward');
-    render(); saveState();
-  }
-
-  function showFloatingGain(event, label) {
-    const node = document.createElement('span');
-    node.className = 'floating-gain'; node.textContent = label;
-    const rect = document.getElementById('tapTarget').getBoundingClientRect();
-    node.style.left = `${event && Number.isFinite(event.clientX) ? event.clientX : rect.left + rect.width / 2}px`;
-    node.style.top = `${event && Number.isFinite(event.clientY) ? event.clientY : rect.top + rect.height / 2}px`;
-    document.body.appendChild(node); setTimeout(() => node.remove(), 850);
-  }
-
-  function showToast(message, tone = '') {
-    const stack = document.getElementById('toastStack');
-    const node = document.createElement('div'); node.className = `toast ${tone}`; node.textContent = message;
-    stack.appendChild(node); setTimeout(() => node.remove(), 3100);
-  }
-
-  function showCelebration(title, subtitle) {
-    const root = document.getElementById('celebration');
-    root.innerHTML = `<div class="celebration-message"><small>${subtitle}</small><b>${title}</b></div>`;
-    setTimeout(() => { if (root.firstChild) root.innerHTML = ''; }, 2600);
-  }
-
-  function setView(name) {
-    const names = { home: 'Главная', upgrades: 'Прокачка', quests: 'Задания' };
-    document.querySelectorAll('.view').forEach(view => view.classList.toggle('view-active', view.id === `${name}View`));
-    document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === name));
-    setText('breadcrumbTitle', names[name] || names.home);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
-  document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => setView(button.dataset.go)));
-  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => {
-    activeFilter = button.dataset.filter;
-    document.querySelectorAll('[data-filter]').forEach(filter => filter.classList.toggle('selected', filter === button));
-    renderUpgrades();
-  }));
-  document.getElementById('tapTarget').addEventListener('click', tap);
-  document.getElementById('claimDaily').addEventListener('click', () => claimQuest('taps'));
-  document.getElementById('claimQuest').addEventListener('click', () => claimQuest('taps'));
-  document.getElementById('resetGame').addEventListener('click', () => {
-    if (!window.confirm('Сбросить весь прогресс Tihon Kombat на этом устройстве?')) return;
-    state = freshState(); localStorage.removeItem(SAVE_KEY); render(); showToast('Новая игра началась. Удачи на арене!');
-  });
-  document.getElementById('profileButton').addEventListener('click', () => showToast(`Тихон · уровень ${state.level} · ${STAGES[stageIndex()].short}`, 'reward'));
-
-  resetDailyIfNeeded();
-  offlineProgress();
-  render();
-  saveState();
-  setInterval(() => {
-    const income = passiveRate();
-    if (income > 0) { awardCoins(income); render(); saveState(); }
-  }, 1000);
-  setInterval(saveState, 15000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveState(); });
-
-  if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.()) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
-  }
+(()=>{'use strict';
+const KEY='tihon-kombat-save-v1',MAX=200,DAY=()=>new Date().toLocaleDateString('en-CA');
+const stages=[[1,'НОВИЧОК','ROOKIE MODE','#c6f467','Новичок','✦'],[26,'EASY DEMON','EASY DEMON MODE','#79e6ff','Easy Demon','♢'],[51,'MEDIUM DEMON','MEDIUM DEMON MODE','#ff71d7','Medium Demon','✹'],[76,'HARD DEMON','HARD DEMON MODE','#ff765b','Hard Demon','♜'],[100,'ULTRA FUNK DEMON','ULTRA FUNK DEMON LEVEL','#e9c5ff','Ultra Funk','✺'],[125,'FUNK MASTER','FUNK MASTER MODE','#8df3c5','Funk Master','♫'],[150,'NEON NIGHTMARE','NEON NIGHTMARE MODE','#ff5fc8','Neon Nightmare','☄'],[175,'COSMIC FUNK','COSMIC FUNK MODE','#82a8ff','Cosmic Funk','✧'],[200,'GODLIKE FUNK','GODLIKE FUNK LEVEL','#fff08a','Godlike Funk','☀']];
+const upgrades=[['tap','Сильный палец','+1 к силе тапа','👆','#c6f467','tap',35],['autoclick','Авто-тренер','+2 монеты/сек','⚙','#6ad9e6','idle',140],['critical','Критический тап','+3% шанс крита','⚡','#ffcf70','tap',220,20],['combo','Комбо-двигатель','+8% монет','⛓','#ae91ff','boost',380],['vip','Фанк-браслет','+15% монет','✧','#ff91d1','boost',800],['drone','Фанк-дрон','+12 монет/сек','◈','#81a9ff','idle',1550],['rhythm','Чувство ритма','+25% опыта','♫','#ff78b3','tap',2800],['disco','Диско-реактор','+50% монет','✺','#ffa266','boost',6200],['knuckles','Фанк-перчатки','+2 сила, +3 урон','🥊','#ff8f70','tap',180],['heart','Стальное сердце','+25 боевых HP','♥','#ff6f91','boost',240],['magnet','Монетный магнит','+10% боевых монет','🧲','#7fe2c0','boost',520],['focus','Фокус бойца','+0,5× крит-урон','◎','#ffe27a','tap',900],['battery','Боевая батарея','+5 монет/сек','▣','#7bb8ff','idle',1250],['loot','Охотничья удача','+15% волна','☘','#98ed77','boost',1900],['echo','Эхо-удар','+5% двойного удара','⌁','#d3a0ff','tap',3600,20],['overdrive','Фанк-овердрайв','+20% монет и опыта','✹','#ff80d2','boost',7000]];
+const quests=[['taps','Марафон тапов','Тапни по Тихону 50 раз.',250,50,'👆','#c6f467'],['upgrade','Собери арсенал','Купи 3 улучшения за сегодня.',400,3,'⚙','#6ad9e6'],['earn','Монетный дождь','Заработай 1 000 монет.',500,1000,'✦','#ffcf70']];
+const skills=[['power1','СИЛА','Тяжёлый удар','+12% урона','✦',1],['power2','СИЛА','Сокрушитель','+25% урона','⚔',2,'power1'],['power3','СИЛА','Фанк-крит','+50% боссам','✹',2,'power2'],['heart1','ЗДОРОВЬЕ','Закалка','+30 HP','♥',1],['heart2','ЗДОРОВЬЕ','Второе дыхание','+60 HP','♡',2,'heart1'],['heart3','ЗДОРОВЬЕ','Неукротимый','+100 HP','♜',2,'heart2'],['guard1','ЗАЩИТА','Лёгкая броня','+8% защиты','⬡',1],['guard2','ЗАЩИТА','Стальная пластина','+15% защиты','▰',2,'guard1'],['guard3','ЗАЩИТА','Форт Тихона','+20% защиты','◈',2,'guard2'],['loot1','ДОБЫЧА','Сборщик трофеев','+20% монет','✦',1],['loot2','ДОБЫЧА','Золотоискатель','+35% монет','⚒',2,'loot1'],['loot3','ДОБЫЧА','Король шахт','+50% монет','♛',2,'loot2']];
+const bgs=[['default','Неоновая арена','Базовая атмосфера клуба.',0,'art-default'],['forest','Лесная дорога','Сумеречная чаща.',500,'art-forest'],['mist','Туманная долина','Горный лес в тумане.',1500,'art-mist'],['mine','Глубокие шахты','Тёплый свет под землёй.',1500,'art-mine'],['neon','Фанк-диско','Пульсирующие огни.',3500,'art-neon'],['cosmos','Космический ритм','Туманности к 200 уровню.',8000,'art-cosmos']];
+const enemies=[{id:'fast',name:'БЫСТРОАТАКУЮЩИЙ',desc:'Атака раз в 1 сек · лёгкий урон',ms:1000,dmg:3,art:'👾',names:['Лесной гремлин','Шустрый пиксель','Жужжащий вредитель']},{id:'heavy',name:'ТЯЖЁЛЫЙ БОЕЦ',desc:'Атака раз в 1,5 сек · урон выше',ms:1500,dmg:5,art:'🦇',names:['Шахтный громила','Каменный боец','Теневой рыцарь']}],armorPrice=[80,180,360,650,1050,1600,2300,3200];
+const fresh=()=>({coins:0,level:1,xp:0,taps:0,tapsToday:0,earnedToday:0,upgradesToday:0,upgrades:{},claimed:[],streak:1,lastDay:DAY(),lastSeen:Date.now(),skillPoints:0,skills:{},battleCoins:0,armor:0,background:'default',ownedBackgrounds:['default'],soundEnabled:true,sfxVolume:70,musicEnabled:false,musicVolume:22,musicTrack:'funk',story:{zone:1,wave:1,playerHp:100,enemy:null,nextBoss:10,completed:false}});
+let s=load(),filter='all',tapTimes=[],feverUntil=0,ctx=null,musicTimer=null,musicStep=0;
+function load(){try{let x=JSON.parse(localStorage.getItem(KEY)||'null');if(!x||typeof x!=='object')return fresh();let d=fresh(),o={...d,...x,upgrades:x.upgrades||{},claimed:Array.isArray(x.claimed)?x.claimed:[],skills:x.skills||{},ownedBackgrounds:Array.isArray(x.ownedBackgrounds)?x.ownedBackgrounds:['default'],story:{...d.story,...x.story}};o.level=Math.max(1,Math.min(MAX,+o.level||1));o.skillPoints=Number.isFinite(+x.skillPoints)?Math.max(0,+x.skillPoints):o.level-1;o.ownedBackgrounds=[...new Set(['default',...o.ownedBackgrounds])];if(!bgs.some(b=>b[0]===o.background)||!o.ownedBackgrounds.includes(o.background))o.background='default';o.story.zone=Math.max(1,Math.min(100,+o.story.zone||1));o.story.wave=Math.max(1,Math.min(25,+o.story.wave||1));o.story.nextBoss=Math.max(10,+o.story.nextBoss||10);o.story.playerHp=Math.max(1,+o.story.playerHp||100);return o}catch{return fresh()}}
+function save(){s.lastSeen=Date.now();try{localStorage.setItem(KEY,JSON.stringify(s))}catch{}}
+function num(x){x=Math.max(0,+x||0);return x<1e4?new Intl.NumberFormat('ru-RU',{maximumFractionDigits:x<100?1:0}).format(x):x<1e6?(x/1e3).toFixed(1).replace('.',',')+'K':x<1e9?(x/1e6).toFixed(1).replace('.',',')+'M':(x/1e9).toFixed(1).replace('.',',')+'B'}
+function txt(id,v){let e=document.getElementById(id);if(e)e.textContent=v}function sty(id,p,v){let e=document.getElementById(id);if(e)e.style[p]=v}
+function lv(id){return Math.max(0,+s.upgrades[id]||0)}function sk(id){return!!s.skills[id]}function cost(u){return Math.ceil(u[6]*Math.pow(1.15,lv(u[0])))}function req(l=s.level){return Math.round(18+l*4)}
+function hpMax(){return 100+lv('heart')*25+(sk('heart1')?30:0)+(sk('heart2')?60:0)+(sk('heart3')?100:0)}function red(){return Math.min(.75,s.armor*.04+(sk('guard1')?.08:0)+(sk('guard2')?.15:0)+(sk('guard3')?.2:0))}
+function rank(){let r=stages[0];stages.forEach(x=>{if(s.level>=x[0])r=x});return r}function tapPower(){return 1+lv('tap')+lv('knuckles')*2}function passive(){return lv('autoclick')*2+lv('drone')*12+lv('battery')*5}function xpf(){return 1+lv('rhythm')*.25+lv('overdrive')*.2}function coinMult(){return(1+lv('combo')*.08+lv('vip')*.15+lv('disco')*.5+lv('overdrive')*.2)*(feverUntil>Date.now()?2:1)}
+function zoneName(){let a=['Солнечная чаща','Старые шахты','Кристальные пещеры','Забытые руины','Лавовые глубины','Туманный провал','Неоновые катакомбы','Бездна фанка'];return a[(s.story.zone-1)%8]+(s.story.zone>8?' · ГЛУБИНА '+Math.ceil(s.story.zone/8):'')}
+function enemyNew(){let z=s.story,boss=z.nextBoss<=MAX&&s.level>=z.nextBoss,t=enemies[(z.zone+z.wave)%2],k=1+(z.zone-1)*.22+(z.wave-1)*.08+(s.level-1)*.035,hp=Math.round((boss?494:20)*k);return{type:boss?'boss':t.id,name:boss?'Босс уровня '+z.nextBoss:t.names[(z.zone+z.wave)%3],hp,maxHp:hp,boss,ms:boss?1500:t.ms,dmg:Math.round((boss?10:t.dmg)*k),last:Date.now()}}
+function ensureEnemy(){if(!s.story.enemy||!Number.isFinite(+s.story.enemy.hp))s.story.enemy=enemyNew()}
+function addCoins(v){v=Math.max(0,Math.floor(v));s.coins+=v;s.earnedToday=(s.earnedToday||0)+v}
+function addXp(v){if(s.level>=MAX)return;s.xp+=Math.max(1,Math.floor(v));let ups=0;while(s.level<MAX&&s.xp>=req()){s.xp-=req();s.level++;s.skillPoints++;s.story.playerHp=hpMax();ups++;let m=stages.find(x=>x[0]===s.level);if(m){sfx('level');celebrate(m[1],'УРОВЕНЬ '+s.level+' — НОВЫЙ РАНГ!')}}if(s.level>=MAX){s.level=MAX;s.xp=0}if(ups&&!stages.some(x=>x[0]===s.level))toast('Новый уровень '+s.level+' · +1 очко навыков','reward')}
+function render(){let r=rank(),i=stages.indexOf(r),q=s.level<MAX?req():0;['balance','upgradeBalance','backgroundBalance'].forEach(id=>txt(id,num(s.coins)));txt('levelNumber',String(s.level).padStart(2,'0'));txt('upgradeLevel',String(s.level).padStart(2,'0'));txt('sideLevel',String(s.level).padStart(2,'0'));txt('sideRank',r[4]);txt('rankName',r[1]);txt('stageTier',r[2]);txt('nextLevelLabel',String(Math.min(MAX,s.level+1)).padStart(2,'0'));txt('xpCurrent',num(s.xp));txt('xpNeeded',q?num(q):'MAX');sty('xpFill','width',(q?Math.min(100,s.xp/q*100):100)+'%');txt('tapPower',num(tapPower()));txt('passiveRate',num(passive()));txt('totalTaps',num(s.taps));txt('upgradeCount',num(Object.values(s.upgrades).reduce((a,b)=>a+(+b||0),0)));txt('streak',s.streak+' дней');document.getElementById('characterStage').dataset.tier=i;document.body.dataset.background=s.background;milestones();daily();renderUpgrades();renderQuests();renderStory();renderSkills();renderBackgrounds();renderSettings();fever()}
+function milestones(){document.getElementById('milestoneList').innerHTML=stages.slice(1).map((x,i)=>{let done=s.level>=x[0],cur=i+1===stages.indexOf(rank());return'<div class="milestone-row '+(done?'unlocked ':'')+(cur?'current':'')+'" style="--milestone-color:'+x[3]+'"><span class="milestone-badge">'+(done?x[5]:'◇')+'</span><span class="milestone-info"><b>'+x[1]+'</b><small>С '+x[0]+' уровня</small></span><span class="milestone-status">'+(done?'ОТКРЫТ':'LVL '+x[0])+'</span></div>'}).join('')}
+function daily(){let n=Math.min(50,s.tapsToday||0),got=s.claimed.includes('taps');txt('dailyTapCount',n);sty('dailyProgressFill','width',n*2+'%');sty('questDailyProgress','width',n*2+'%');txt('questProgressText',n+' / 50');txt('questDate',new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long'}).format(new Date()));['claimDaily','claimQuest'].forEach(id=>{let b=document.getElementById(id);b.disabled=n<50||got;b.innerHTML=got?'Награда получена <span>✓</span>':n>=50?'Забрать награду <span>+250 ✦</span>':'Задание в процессе <span>→</span>'})}
+function progress(q){return Math.min(q[4],q[0]==='taps'?(s.tapsToday||0):q[0]==='upgrade'?(s.upgradesToday||0):(s.earnedToday||0))}
+function renderQuests(){let root=document.getElementById('questList');root.innerHTML=quests.map(q=>{let p=progress(q),done=p>=q[4],got=s.claimed.includes(q[0]);return'<article class="quest-item" style="--quest-color:'+q[6]+'"><span class="quest-item-icon">'+q[5]+'</span><span class="quest-item-copy"><b>'+q[1]+'</b><small>'+q[2]+'</small></span><span class="quest-item-right"><small>'+num(p)+' / '+num(q[4])+' · +'+q[3]+' ✦</small><button data-claim="'+q[0]+'" '+(!done||got?'disabled':'')+'>'+(got?'Получено ✓':done?'Забрать':'Выполняется')+'</button></span></article>'}).join('');root.querySelectorAll('[data-claim]').forEach(b=>b.onclick=()=>claim(b.dataset.claim))}
+function renderUpgrades(){let root=document.getElementById('upgradeGrid');root.innerHTML=upgrades.filter(u=>filter==='all'||u[5]===filter).map(u=>{let n=lv(u[0]),p=cost(u),max=u[7]&&n>=u[7];return'<article class="upgrade-card"><span class="upgrade-icon" style="--upgrade-color:'+u[4]+'">'+u[3]+'</span><span class="upgrade-info"><h3>'+u[1]+'</h3><p>'+u[2]+'</p></span><span class="upgrade-level">LVL '+String(n).padStart(2,'0')+'</span><span class="upgrade-buy"><small>'+u[2]+'</small><button class="buy-button" data-buy="'+u[0]+'" '+(max||s.coins<p?'disabled':'')+'>'+(max?'МАКСИМУМ':'<span>✦</span> '+num(p))+'</button></span></article>'}).join('');root.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>upgradeBuy(b.dataset.buy))}
+function renderStory(){ensureEnemy();let z=s.story,e=z.enemy,t=enemies.find(x=>x.id===e.type)||enemies[0],f=document.getElementById('storyBattlefield');f.dataset.theme=['forest','mine','cave','ruins','lava','mist','neon','abyss'][(z.zone-1)%8];txt('battleCoins',num(s.battleCoins));txt('locationNumber',String(z.zone).padStart(2,'0'));txt('locationName',zoneName());txt('locationDepth','Ярус '+z.zone+' · волна '+z.wave+' из 25');txt('waveBadge','ВОЛНА '+String(z.wave).padStart(2,'0'));txt('enemyType',e.boss?'БОСС · УРОВЕНЬ '+z.nextBoss:t.name);txt('enemyArt',e.boss?'👹':t.art);txt('enemyName',e.name);txt('enemyBossTag',e.boss?'BOSS':'');txt('enemyHp',num(e.hp));txt('enemyMaxHp',num(e.maxHp));sty('enemyHpFill','width',Math.max(0,e.hp/e.maxHp*100)+'%');txt('enemyAttackNote',e.boss?'Атака раз в 1,5 сек · босс наносит обычный урон':t.desc);let mh=hpMax();z.playerHp=Math.min(mh,z.playerHp);txt('playerHp',num(z.playerHp));txt('playerMaxHp',num(mh));sty('playerHpFill','width',z.playerHp/mh*100+'%');txt('armorStatus','Броня: '+Math.round(red()*100)+'% защиты');txt('armorLevel',s.armor+' / 8');txt('armorReduction',Math.round(red()*100)+'%');let ab=document.getElementById('buyArmor'),p=armorPrice[s.armor]||0;ab.disabled=s.armor>=8||s.battleCoins<p;ab.textContent=s.armor>=8?'БРОНЯ МАКСИМАЛЬНОГО УРОВНЯ':'Улучшить · ⚙ '+num(p);let total=z.completed?2500:(z.zone-1)*25+z.wave-1,pct=total/2500*100;txt('routeProgress',pct.toFixed(1).replace('.',',')+'%');sty('routeFill','width',pct+'%');txt('routeText',num(total)+' из 2 500 волн пройдено');txt('routeLocation',z.zone);txt('routeWave',z.wave);txt('nextBossLevel',z.nextBoss<=MAX?'ур. '+z.nextBoss:'все боссы пройдены');document.getElementById('enemyTap').disabled=!!z.completed;if(z.completed)txt('battleLog','Маршрут пройден! Все 100 локаций покорены.')}
+function renderSkills(){txt('skillPoints',s.skillPoints);let root=document.getElementById('skillGrid'),branches=[...new Set(skills.map(x=>x[1]))];root.innerHTML=branches.map(br=>'<section class="skill-branch card-surface"><div class="skill-branch-head"><p class="eyebrow">ВЕТКА</p><h2>'+br+'</h2></div><div class="skill-nodes">'+skills.filter(n=>n[1]===br).map(n=>{let own=sk(n[0]),locked=n[6]&&!sk(n[6]);return'<article class="skill-node '+(own?'owned ':'')+(locked?'locked':'')+'"><span class="skill-node-icon">'+n[4]+'</span><span class="skill-node-copy"><b>'+n[2]+'</b><small>'+n[3]+'</small><em>'+n[5]+' '+(n[5]===1?'очко':'очка')+'</em></span><button class="skill-buy" data-skill="'+n[0]+'" '+(own||locked||s.skillPoints<n[5]?'disabled':'')+'>'+(own?'ИЗУЧЕНО':locked?'ЗАКРЫТО':'ИЗУЧИТЬ · '+(n[5]===1?'I':'II'))+'</button></article>'}).join('')+'</div></section>').join('');root.querySelectorAll('[data-skill]').forEach(b=>b.onclick=()=>skillBuy(b.dataset.skill))}
+function renderBackgrounds(){let root=document.getElementById('backgroundGrid');root.innerHTML=bgs.map(b=>{let own=s.ownedBackgrounds.includes(b[0]),active=s.background===b[0];return'<article class="background-card '+(active?'selected':'')+'"><div class="background-art '+b[4]+'" style="--preview-image:url(assets/background-forest.jpg)"><span>'+(active?'АКТИВЕН':own?'ОТКРЫТ':'ЗАКРЫТ')+'</span></div><div class="background-copy"><h2>'+b[1]+'</h2><p>'+b[2]+'</p><button data-bg="'+b[0]+'" '+(!own&&s.coins<b[3]?'disabled':'')+'>'+(active?'Выбран':own?'Применить':'Открыть · ✦ '+num(b[3]))+'</button></div></article>'}).join('');root.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>bgBuy(b.dataset.bg))}
+function renderSettings(){let chk=(id,v)=>{let e=document.getElementById(id);if(document.activeElement!==e)e.checked=v};chk('sfxEnabled',s.soundEnabled);chk('musicEnabled',s.musicEnabled);for(let[id,v]of[['sfxVolume',s.sfxVolume],['musicVolume',s.musicVolume],['musicTrack',s.musicTrack]]){let e=document.getElementById(id);if(document.activeElement!==e)e.value=v}txt('sfxVolumeLabel',s.sfxVolume+'%');txt('musicVolumeLabel',s.musicVolume+'%');let b=document.getElementById('soundToggle');b.classList.toggle('sound-off',!s.soundEnabled);b.textContent=s.soundEnabled?'♫':'♩'}
+function fever(){tapTimes=tapTimes.filter(t=>Date.now()-t<1000);txt('comboCount',tapTimes.length);let hot=feverUntil>Date.now();txt('feverLabel',hot?'FUNK FEVER x2':'FUNK FEVER x1');sty('comboFill','width',Math.min(100,tapTimes.length*20)+'%');document.getElementById('characterStage').classList.toggle('fever-active',hot)}
+function registerTap(){let now=Date.now();tapTimes=tapTimes.filter(t=>now-t<1000);tapTimes.push(now);if(tapTimes.length>=5)feverUntil=now+2300;fever();return feverUntil>now}
+function pop(el){el.classList.remove('tap-pop');void el.offsetWidth;el.classList.add('tap-pop');setTimeout(()=>el.classList.remove('tap-pop'),190);let r=el.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;for(let i=0;i<7;i++){let a=(Math.PI*2*i/7)+Math.random()*.35,d=45+Math.random()*36,n=document.createElement('span');n.className='tap-spark';n.textContent=i%2?'✦':'•';n.style.left=cx+'px';n.style.top=cy+'px';n.style.setProperty('--dx',Math.cos(a)*d+'px');n.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(n);setTimeout(()=>n.remove(),650)}}
+function floating(ev,text){let n=document.createElement('span');n.className='floating-gain';n.textContent=text;let target=ev.currentTarget,r=target.getBoundingClientRect();n.style.left=(Number.isFinite(ev.clientX)?ev.clientX:r.left+r.width/2)+'px';n.style.top=(Number.isFinite(ev.clientY)?ev.clientY:r.top+r.height/2)+'px';document.body.appendChild(n);setTimeout(()=>n.remove(),850)}
+function toast(message,tone=''){let n=document.createElement('div');n.className='toast '+tone;n.textContent=message;document.getElementById('toastStack').appendChild(n);setTimeout(()=>n.remove(),3100)}
+function celebrate(title,sub){let r=document.getElementById('celebration');r.innerHTML='<div class="celebration-message"><small>'+sub+'</small><b>'+title+'</b></div>';setTimeout(()=>{if(r.firstChild)r.innerHTML=''},2600)}
+function mainTap(ev){let hot=registerTap(),crit=Math.random()<Math.min(.8,lv('critical')*.03),coins=Math.floor(tapPower()*coinMult()*(crit?5:1));addCoins(coins);s.taps++;s.tapsToday++;addXp(Math.max(1,Math.floor((1+lv('tap')*.16)*xpf())));pop(ev.currentTarget);floating(ev,'+'+num(coins)+(crit?' CRIT!':' ✦'));sfx(crit?'crit':'tap');render();save()}
+function enemyTap(ev){let z=s.story;if(z.completed)return;ensureEnemy();let e=z.enemy,hot=registerTap(),d=Math.round(tapPower()*(1+(sk('power1')?.12:0)+(sk('power2')?.25:0)+(sk('power3')?.5:0))*(hot?2:1)),crit=Math.random()<Math.min(.8,lv('critical')*.03);if(crit)d=Math.round(d*(5+lv('focus')*.5));if(e.boss&&sk('power3'))d=Math.round(d*1.5);let echo=Math.random()<lv('echo')*.05;if(echo)d=Math.round(d*1.5);e.hp=Math.max(0,e.hp-d);s.taps++;s.tapsToday++;addXp(Math.max(1,Math.floor(xpf())));pop(ev.currentTarget);floating(ev,'−'+num(d)+(crit?' CRIT!':''));sfx(crit?'crit':'hit');if(e.hp<=0)killEnemy(e);else txt('battleLog','Удар: '+num(d)+' урона'+(crit?' · крит!':'')+(echo?' · эхо-удар!':''));render();save()}
+function killEnemy(e){let z=s.story,loot=(sk('loot1')?.2:0)+(sk('loot2')?.35:0)+(sk('loot3')?.5:0),reward=Math.floor((10+z.zone*5+z.wave*2)*(e.boss?5:1)*(1+loot+lv('magnet')*.1)*(1+lv('loot')*.15));s.battleCoins+=reward;addCoins(Math.floor((e.boss?100:12+z.zone*2)*coinMult()));if(e.boss){z.nextBoss+=10;celebrate('БОСС ПОВЕРЖЕН','Добыча +'+num(reward)+' ⚙');sfx('boss')}addXp(8+z.zone+z.wave);if(z.wave>=25){if(z.zone>=100)z.completed=true;else{z.zone++;z.wave=1;toast('Новая локация: '+zoneName(),'reward')}}else z.wave++;let bonus=Math.floor((15+z.zone*3)*(1+loot+lv('loot')*.15));s.battleCoins+=bonus;addCoins(Math.floor(bonus*.5));z.playerHp=Math.min(hpMax(),z.playerHp+Math.ceil(hpMax()*.1));z.enemy=z.completed?e:enemyNew();sfx('wave');txt('battleLog','Волна пройдена · +'+num(reward+bonus)+' боевых монет')}
+function attackTick(){let z=s.story;if(z.completed)return;ensureEnemy();let e=z.enemy,now=Date.now();if(now-(e.last||now)>=e.ms){e.last=now;let d=Math.max(1,Math.round(e.dmg*(1-red())));z.playerHp-=d;sfx('hurt');if(z.playerHp<=0){let loss=Math.min(s.battleCoins,Math.ceil(s.battleCoins*.05));s.battleCoins-=loss;z.playerHp=Math.ceil(hpMax()*.65);toast('Тихон отступил · потеряно '+loss+' ⚙')}txt('battleLog',e.name+' атакует: −'+d+' HP');renderStory();save()}}
+function upgradeBuy(id){let u=upgrades.find(x=>x[0]===id);if(!u)return;let p=cost(u);if(s.coins<p||(u[7]&&lv(id)>=u[7]))return;s.coins-=p;s.upgrades[id]=lv(id)+1;s.upgradesToday=(s.upgradesToday||0)+1;toast(u[1]+': улучшение установлено','reward');sfx('upgrade');render();save()}
+function armorBuy(){if(s.armor>=8)return;let p=armorPrice[s.armor];if(s.battleCoins<p)return;s.battleCoins-=p;s.armor++;s.story.playerHp=Math.min(hpMax(),s.story.playerHp+Math.ceil(hpMax()*.2));toast('Броня улучшена · защита '+Math.round(red()*100)+'%','reward');sfx('upgrade');render();save()}
+function skillBuy(id){let n=skills.find(x=>x[0]===id);if(!n||sk(id)||s.skillPoints<n[5]||(n[6]&&!sk(n[6])))return;s.skillPoints-=n[5];s.skills[id]=1;if(id.startsWith('heart'))s.story.playerHp=hpMax();toast('Навык изучен: '+n[2],'reward');sfx('upgrade');render();save()}
+function bgBuy(id){let b=bgs.find(x=>x[0]===id);if(!b)return;if(!s.ownedBackgrounds.includes(id)){if(s.coins<b[3])return;s.coins-=b[3];s.ownedBackgrounds.push(id);toast('Фон открыт: '+b[1],'reward');sfx('upgrade')}s.background=id;render();save()}
+function claim(id){let q=quests.find(x=>x[0]===id);if(!q||s.claimed.includes(id)||progress(q)<q[4])return;s.claimed.push(id);addCoins(q[3]);addXp(q[3]/20);toast('Задание выполнено: +'+q[3]+' ✦','reward');sfx('claim');render();save()}
+function view(name){let names={home:'Главная',upgrades:'Прокачка',quests:'Задания',story:'Сюжет',skills:'Навыки',backgrounds:'Фоны',settings:'Настройки'};document.querySelectorAll('.view').forEach(v=>v.classList.toggle('view-active',v.id===name+'View'));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));txt('breadcrumbTitle',names[name]||names.home);scrollTo({top:0,behavior:'smooth'})}
+function audio(){if(!ctx){let C=window.AudioContext||window.webkitAudioContext;if(C)ctx=new C()}if(ctx?.state==='suspended')ctx.resume().catch(()=>{})}
+function sfx(k='tap'){if(!s.soundEnabled||s.sfxVolume<=0)return;audio();if(!ctx)return;let a={ui:[440,.045],tap:[560,.06],hit:[220,.08],crit:[880,.1],level:[660,.22],upgrade:[720,.1],claim:[880,.12],wave:[392,.16],boss:[180,.28],hurt:[125,.12]},[hz,dur]=a[k]||a.tap,o=ctx.createOscillator(),g=ctx.createGain();o.type=['hurt','boss'].includes(k)?'sawtooth':'triangle';o.frequency.setValueAtTime(hz,ctx.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(45,hz*.72),ctx.currentTime+dur);g.gain.setValueAtTime(s.sfxVolume/100*(k==='ui'?.07:.13),ctx.currentTime);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+dur);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+dur)}
+const tunes={funk:{tempo:118,n:[55,65.4,73.4,82.4,73.4,65.4,61.7,73.4]},forest:{tempo:82,n:[110,130.8,146.8,164.8,146.8,130.8,123.5,146.8]},mine:{tempo:96,n:[65.4,73.4,82.4,98,82.4,73.4,61.7,82.4]}};
+function musicStop(){if(musicTimer){clearInterval(musicTimer);musicTimer=null}}
+function musicStart(){if(!s.musicEnabled||s.musicVolume<=0)return;audio();if(!ctx)return;musicStop();musicStep=0;let t=tunes[s.musicTrack]||tunes.funk;musicTimer=setInterval(()=>{if(!s.musicEnabled||!ctx)return;let now=ctx.currentTime,hz=t.n[musicStep++%t.n.length];[[hz,.09,'triangle'],[hz/2,.045,'sine']].forEach(([f,v,type])=>{let o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v*s.musicVolume/100,now);g.gain.exponentialRampToValueAtTime(.001,now+.22);o.connect(g);g.connect(ctx.destination);o.start(now);o.stop(now+.23)})},60000/t.tempo/2)}
+function musicSync(){s.musicEnabled?musicStart():musicStop()}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>view(b.dataset.go));
+document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));renderUpgrades()});
+document.getElementById('tapTarget').onclick=mainTap;document.getElementById('enemyTap').onclick=enemyTap;document.getElementById('buyArmor').onclick=armorBuy;document.getElementById('claimDaily').onclick=()=>claim('taps');document.getElementById('claimQuest').onclick=()=>claim('taps');
+document.getElementById('resetGame').onclick=()=>{if(!confirm('Сбросить весь прогресс Tihon Kombat?'))return;musicStop();s=fresh();localStorage.removeItem(KEY);render();toast('Новая игра началась!')};
+document.getElementById('profileButton').onclick=()=>toast('Тихон · уровень '+s.level+' · '+rank()[4],'reward');
+document.getElementById('soundToggle').onclick=()=>{s.soundEnabled=!s.soundEnabled;audio();renderSettings();save();sfx('ui')};
+document.addEventListener('pointerdown',ev=>{let b=ev.target.closest('button');if(b&&!['tapTarget','enemyTap','soundToggle'].includes(b.id))sfx('ui')},{passive:true});
+document.getElementById('sfxEnabled').onchange=e=>{s.soundEnabled=e.target.checked;audio();save();renderSettings()};
+document.getElementById('sfxVolume').oninput=e=>{s.sfxVolume=+e.target.value;txt('sfxVolumeLabel',s.sfxVolume+'%');save()};
+document.getElementById('musicEnabled').onchange=e=>{s.musicEnabled=e.target.checked;audio();musicSync();save()};
+document.getElementById('musicVolume').oninput=e=>{s.musicVolume=+e.target.value;txt('musicVolumeLabel',s.musicVolume+'%');musicSync();save()};
+document.getElementById('musicTrack').onchange=e=>{s.musicTrack=e.target.value;musicSync();save()};
+document.getElementById('musicPreview').onclick=()=>{s.musicEnabled=!s.musicEnabled;audio();musicSync();renderSettings();save()};
+document.addEventListener('pointerdown',()=>{audio();if(s.musicEnabled)musicStart()},{once:true,passive:true});
+document.addEventLis
+tener('visibilitychange',()=>{if(document.visibilityState==='hidden'){save();musicStop()}else if(s.musicEnabled)musicStart()});
+if(s.lastDay!==DAY()){let prev=new Date();prev.setDate(prev.getDate()-1);s.streak=s.lastDay===prev.toLocaleDateString('en-CA')?(s.streak||0)+1:1;s.lastDay=DAY();s.earnedToday=s.tapsToday=s.upgradesToday=0;s.claimed=[]}
+let away=Math.min(28800,Math.max(0,(Date.now()-(s.lastSeen||Date.now()))/1000)),offline=Math.floor(away*passive());if(offline){addCoins(offline);setTimeout(()=>toast('Пока тебя не было: +'+num(offline)+' ✦'),400)}
+ensureEnemy();s.story.playerHp=Math.min(hpMax(),s.story.playerHp||hpMax());render();save();
+setInterval(()=>{if(passive()){addCoins(passive());render();save()}attackTick();fever()},1000);setInterval(save,15000);
+if('serviceWorker'in navigator&&!window.Capacitor?.isNativePlatform?.())addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}));
 })();
+

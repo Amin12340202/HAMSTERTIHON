@@ -1,7 +1,7 @@
 {
-  "name": "Tihon Kombat",
-  "short_name": "Tihon Kombat",
-  "description": "Тапай, прокачивайся и проходи демон-уровни.",
+  "name": "Tihon Kombat 1.1",
+  "short_name": "Tihon Kombat 1.1",
+  "description": "Тапай, сражайся, прокачивай навыки и исследуй бесконечные локации.",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",
