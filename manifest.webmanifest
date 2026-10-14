@@ -1,0 +1,13 @@
+{
+  "name": "Tihon Kombat",
+  "short_name": "Tihon Kombat",
+  "description": "Тапай, прокачивайся и проходи демон-уровни.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#11121a",
+  "theme_color": "#11121a",
+  "icons": [{ "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#11121b" />
+    <meta name="description" content="Tihon Kombat — тапай, прокачивайся и проходи демон-уровни." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Tihon Kombat</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#home" aria-label="Tihon Kombat — главная">
+          <span class="brand-mark">TK</span>
+          <span class="brand-copy"><b>TIHON</b><small>KOMBAT CLUB</small></span>
+        </a>
+
+        <div class="season-card">
+          <span class="season-icon">✦</span>
+          <span><small>СЕЗОН 01</small><b>Путь легенды</b></span>
+          <span class="live-dot" aria-label="Сезон активен"></span>
+        </div>
+
+        <nav class="main-nav" aria-label="Основная навигация">
+          <button class="nav-item active" data-view="home"><span class="nav-icon">⌂</span><span>Главная</span><span class="nav-arrow">↗</span></button>
+          <button class="nav-item" data-view="upgrades"><span class="nav-icon">↗</span><span>Прокачка</span></button>
+          <button class="nav-item" data-view="quests"><span class="nav-icon">▤</span><span>Задания</span><span class="nav-count">3</span></button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="rank-mini"><span class="rank-medal">✹</span><span><small>ТВОЙ РАНГ</small><b id="sideRank">Новичок</b></span><span class="rank-level" id="sideLevel">01</span></div>
+          <button class="reset-button" id="resetGame" type="button">↻ <span>Начать заново</span></button>
+          <div class="sidebar-version">TIHON KOMBAT <span>•</span> v1.0</div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="mobile-brand"><span class="brand-mark">TK</span><b>TIHON KOMBAT</b></div>
+          <div class="breadcrumb"><span>АРЕНА</span><i> / </i><b id="breadcrumbTitle">Главная</b></div>
+          <div class="topbar-right">
+            <div class="balance-chip"><span class="coin-symbol">✦</span><span><small>БАЛАНС</small><b id="balance">0</b></span><span class="balance-plus">+</span></div>
+            <button class="avatar-button" id="profileButton" type="button" aria-label="Профиль игрока">T</button>
+          </div>
+        </header>
+
+        <div class="view view-active" id="homeView">
+          <section class="welcome-row">
+            <div><p class="eyebrow"><span class="eyebrow-dot"></span> АРЕНА ОТКРЫТА</p><h1>Время <span>тапать.</span></h1><p class="welcome-copy">Каждый тап приближает Тихона к абсолютному фанку.</p></div>
+            <div class="streak-chip"><span>🔥</span><span><small>ТВОЙ СТРИК</small><b id="streak">0 дней</b></span></div>
+          </section>
+
+          <div class="home-grid">
+            <section class="game-card card-surface">
+              <div class="card-topline"><div class="level-pill"><span>УРОВЕНЬ</span><b id="levelNumber">01</b></div><div class="rank-tag" id="rankTag"><span class="rank-tag-icon">✦</span><span><small>ТЕКУЩИЙ РАНГ</small><b id="rankName">НОВИЧОК</b></span></div><button class="more-button" aria-label="Ещё">···</button></div>
+              <div class="xp-area"><div class="xp-label"><span>ОПЫТ ДО <b id="nextLevelLabel">02</b> УРОВНЯ</span><b><span id="xpCurrent">0</span> <i>/</i> <span id="xpNeeded">22</span> XP</b></div><div class="xp-track"><div class="xp-fill" id="xpFill"></div><span class="xp-glint"></span></div></div>
+
+              <div class="character-stage" id="characterStage" data-tier="0">
+                <div class="stage-aura"></div><div class="stage-ring ring-one"></div><div class="stage-ring ring-two"></div>
+                <span class="stage-star star-a">✦</span><span class="stage-star star-b">✧</span><span class="stage-star star-c">✦</span>
+                <div class="stage-tier" id="stageTier">ROOKIE MODE</div>
+                <button class="character-tap" id="tapTarget" type="button" aria-label="Тапнуть Тихона">
+                  <img src="assets/tihon.jpg" alt="Тихон — персонаж игры" draggable="false" />
+                  <span class="tap-overlay"></span><span class="tap-hint">TAP!</span>
+                </button>
+                <div class="stage-caption"><span class="caption-mark">✺</span><span><small>ГЛАВНЫЙ БОЕЦ</small><b>ТИХОН</b></span><span class="caption-online"><i></i> В СЕТИ</span></div>
+                <div class="tier-effects" aria-hidden="true"><span>⚡</span><span>✧</span><span>⚡</span></div>
+              </div>
+
+              <div class="tap-footer"><div class="tap-tip"><span class="tip-pulse"></span><span>Тапай по Тихону, чтобы собирать монеты</span></div><div class="tap-power"><span>СИЛА ТАПА</span><b>✦ <span id="tapPower">1</span></b></div></div>
+            </section>
+
+            <section class="side-stack">
+              <article class="stage-card card-surface">
+                <div class="section-head"><div><p class="eyebrow">ПУТЬ К ВЕРШИНЕ</p><h2>Уровни демона</h2></div><span class="stage-emblem">♢</span></div>
+                <div class="milestone-list" id="milestoneList"></div>
+                <button class="text-link" data-go="upgrades" type="button">Ускорить прокачку <span>↗</span></button>
+              </article>
+              <article class="daily-card card-surface">
+                <div class="daily-top"><span class="daily-icon">✦</span><span class="daily-label"><small>ЕЖЕДНЕВНОЕ</small><b>Марафон тапов</b></span><span class="daily-reward">+250 <i>✦</i></span></div>
+                <div class="daily-progress"><div class="daily-track"><span id="dailyProgressFill"></span></div><small><b id="dailyTapCount">0</b> / 50 тапов</small></div>
+                <button class="claim-button" id="claimDaily" type="button" disabled>Задание в процессе <span>→</span></button>
+              </article>
+            </section>
+          </div>
+
+          <section class="stats-row">
+            <article class="stat-card card-surface"><span class="stat-icon icon-cyan">✦</span><span><small>ВСЕГО ТАПОВ</small><b id="totalTaps">0</b></span><span class="stat-trend">↗ <i>вперёд</i></span></article>
+            <article class="stat-card card-surface"><span class="stat-icon icon-violet">◷</span><span><small>ПАССИВНЫЙ ДОХОД</small><b><span id="passiveRate">0</span> <i>/ сек</i></b></span><span class="stat-trend">+ <i>монеты</i></span></article>
+            <article class="stat-card card-surface"><span class="stat-icon icon-yellow">♜</span><span><small>УЛУЧШЕНИЙ</small><b id="upgradeCount">0</b></span><button class="stat-link" data-go="upgrades" aria-label="Открыть улучшения">↗</button></article>
+          </section>
+        </div>
+
+        <section class="view" id="upgradesView">
+          <section class="page-heading"><div><p class="eyebrow"><span class="eyebrow-dot"></span> МАСТЕРСКАЯ ТИХОНА</p><h1>Прокачай <span>арсенал.</span></h1><p class="welcome-copy">Собирай улучшения и превращай каждый тап в легенду.</p></div><div class="balance-large"><span>✦</span><div><small>ТВОИ МОНЕТЫ</small><b id="upgradeBalance">0</b></div></div></section>
+          <section class="upgrade-summary card-surface"><div class="summary-icon">↗</div><div><small>ПРОКАЧКА БОЙЦА</small><b>Собери свой стиль игры</b><p>Прокачки работают сразу и сохраняются на устройстве.</p></div><div class="summary-stat"><small>УРОВЕНЬ БОЙЦА</small><b id="upgradeLevel">01</b></div></section>
+          <div class="upgrade-toolbar"><div><p class="eyebrow">МАГАЗИН</p><h2>Улучшения</h2></div><div class="upgrade-filters" role="group" aria-label="Фильтр улучшений"><button class="filter-button selected" data-filter="all">Все</button><button class="filter-button" data-filter="tap">Тап</button><button class="filter-button" data-filter="idle">Авто</button><button class="filter-button" data-filter="boost">Бонусы</button></div></div>
+          <div class="upgrade-grid" id="upgradeGrid"></div>
+        </section>
+
+        <section class="view" id="questsView">
+          <section class="page-heading"><div><p class="eyebrow"><span class="eyebrow-dot"></span> ВЫЗОВ ПРИНЯТ</p><h1>Задания <span>дня.</span></h1><p class="welcome-copy">Выполняй задания, забирай награды и двигайся к 100 уровню.</p></div><div class="quest-date"><span>✦</span><div><small>НОВАЯ ГЛАВА</small><b id="questDate">Сегодня</b></div></div></section>
+          <section class="quest-feature card-surface"><div class="quest-feature-art">✹<span>✦</span><b>50</b></div><div class="quest-feature-copy"><p class="eyebrow">ЕЖЕДНЕВНЫЙ ЧЕЛЛЕНДЖ</p><h2>Марафон тапов</h2><p>Проведи серию точных тапов и забери награду для своего арсенала.</p><div class="quest-feature-progress"><div class="daily-track"><span id="questDailyProgress"></span></div><b id="questProgressText">0 / 50</b></div></div><button class="claim-button quest-claim" id="claimQuest" type="button" disabled>Забрать награду <span>+250 ✦</span></button></section>
+          <div class="quest-list-heading"><div><p class="eyebrow">НА СЕГОДНЯ</p><h2>Три испытания</h2></div><span class="quest-reset">Обновляется каждый день <i>◷</i></span></div>
+          <div class="quest-list" id="questList"></div>
+        </section>
+
+        <footer class="footer-note"><span>✦</span> Все данные хранятся только на этом устройстве <span class="footer-dot">•</span> TIHON KOMBAT</footer>
+      </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Навигация"><button class="mobile-nav-item active" data-view="home"><span>⌂</span><small>Арена</small></button><button class="mobile-nav-item" data-view="upgrades"><span>↗</span><small>Прокачка</small></button><button class="mobile-nav-item" data-view="quests"><span>▤</span><small>Задания</small></button></nav>
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+    <div class="celebration" id="celebration" aria-live="polite"></div>
+    <script src="game.js"></script>
+  </body>
+</html>
